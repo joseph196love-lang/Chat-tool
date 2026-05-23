@@ -2,79 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ephemeral Chat</title>
+    <title>Realtime Firebase Chat</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { background-color: #f0f2f5; }
-        .chat-scroll { scrollbar-width: none; } /* Clean look, no scrollbar */
-        .msg-bubble { max-width: 75%; }
-        /* iMessage-style rounded corners */
-        .user-msg { border-radius: 18px 18px 4px 18px; }
-    </style>
 </head>
-<body class="h-screen flex flex-col max-w-2xl mx-auto border-x border-gray-200 bg-white">
+<body class="bg-gray-100 h-screen flex flex-col">
 
-    <!-- Header: Telegram style -->
-    <header class="flex items-center p-3 border-b bg-white/80 backdrop-blur-md sticky top-0 z-10">
-        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold mr-3">#</div>
-        <div>
-            <h1 class="font-bold text-gray-900 leading-tight">Ephemeral Chat</h1>
-            <p class="text-[11px] text-green-500 font-medium">Online</p>
-        </div>
-        <div class="ml-auto text-xs text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded-md" id="username"></div>
-    </header>
+    <header class="bg-indigo-600 text-white p-4 font-bold text-xl shadow-md">Live Chat</header>
 
-    <!-- Chat Area -->
-    <div id="chat-window" class="flex-1 overflow-y-auto p-4 space-y-3">
-        <!-- Messages will inject here -->
-    </div>
+    <div id="chat-window" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
 
-    <!-- Input Area: Modern bottom bar -->
-    <form id="chat-form" class="p-3 bg-white border-t flex items-end gap-2">
-        <button type="button" class="text-gray-400 hover:text-indigo-600 pb-2">➕</button>
-        <textarea id="message-input" rows="1" placeholder="Message" 
-                  class="flex-1 border rounded-2xl px-4 py-2 bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
-        <button type="submit" class="bg-indigo-600 text-white p-2 rounded-full hover:bg-indigo-700">
-            <svg class="w-5 h-5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
-        </button>
+    <form id="chat-form" class="bg-white p-4 border-t flex gap-2">
+        <input id="msg-input" type="text" class="flex-1 border rounded-full px-4 py-2" placeholder="Message..." required>
+        <button type="submit" class="bg-indigo-600 text-white px-6 py-2 rounded-full">Send</button>
     </form>
 
-    <script>
-        const adjectives = ["Happy", "Swift", "Cosmic", "Neon", "Brave", "Quiet"];
-        const nouns = ["Panda", "Fox", "Robot", "Eagle", "Ninja", "Pixel"];
-        document.getElementById('username').textContent = adjectives[Math.floor(Math.random()*adjectives.length)] + nouns[Math.floor(Math.random()*nouns.length)];
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+        import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+        // Use your config here
+        const firebaseConfig = { /* ... your config ... */ };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const chatRef = ref(db, 'messages');
 
         const chatWindow = document.getElementById('chat-window');
-        const chatForm = document.getElementById('chat-form');
-        const messageInput = document.getElementById('message-input');
 
-        chatForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const text = messageInput.value.trim();
-            if (!text) return;
-
-            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
-            const msgDiv = document.createElement('div');
-            msgDiv.className = "flex justify-end animate-in fade-in zoom-in-95 duration-200";
-            msgDiv.innerHTML = `
-                <div class="msg-bubble user-msg bg-indigo-600 text-white px-4 py-2 shadow-sm">
-                    <p class="text-sm">${escapeHtml(text)}</p>
-                    <span class="text-[9px] text-indigo-200 block text-right mt-0.5">${time}</span>
-                </div>
-            `;
-            
-            chatWindow.appendChild(msgDiv);
-            messageInput.value = "";
+        // Listen for new messages
+        onChildAdded(chatRef, (data) => {
+            const msg = data.val();
+            const div = document.createElement('div');
+            div.className = "bg-white p-2 rounded shadow w-fit";
+            div.textContent = msg.text;
+            chatWindow.appendChild(div);
             chatWindow.scrollTop = chatWindow.scrollHeight;
         });
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        // Send message
+        document.getElementById('chat-form').onsubmit = (e) => {
+            e.preventDefault();
+            const input = document.getElementById('msg-input');
+            push(chatRef, { text: input.value });
+            input.value = "";
+        };
     </script>
 </body>
 </html>
