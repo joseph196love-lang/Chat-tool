@@ -6,74 +6,119 @@
     <title>Messenger</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .chat-bubble { max-width: 80%; padding: 10px 16px; border-radius: 18px; margin: 4px 0; font-size: 15px; cursor: pointer; }
+        .chat-bubble { max-width: 80%; padding: 10px 16px; border-radius: 18px; margin: 4px 0; font-size: 15px; }
         .my-msg { background-color: #007AFF; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
-        .other-msg { background-color: #E9E9EB; color: #000; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .other-msg { background-color: #E9E9EB; color: #000; align-self: flex-start; border-bottom-left-radius: 4px; cursor: pointer; }
+        #chat-window { scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-gray-50 h-screen flex flex-col">
 
     <header class="bg-white border-b p-4 text-center font-bold text-lg shadow-sm">
-        Messenger <span id="user-display" class="text-xs text-blue-500 block"></span>
+        Messenger
+        <div class="flex flex-col items-center gap-1 mt-1">
+            <span id="status" class="text-[10px] text-gray-400 font-normal">Public Chat</span>
+            <div id="recent-chats" class="flex gap-2 text-[10px] text-blue-500"></div>
+            <button id="reset-btn" onclick="resetChat()" class="hidden text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Leave Private</button>
+        </div>
     </header>
 
     <div id="chat-window" class="flex-1 overflow-y-auto p-4 flex flex-col space-y-1"></div>
 
     <form id="chat-form" class="bg-white p-4 border-t flex gap-3 items-center">
         <input id="msg-input" type="text" class="flex-1 bg-gray-100 rounded-full px-5 py-3 focus:outline-none" placeholder="Message..." required>
-        <button type="submit" class="text-blue-500 font-bold px-2">Send</button>
+        <button type="submit" class="text-blue-500 font-bold px-4">Send</button>
     </form>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-        const firebaseConfig = { /* ... YOUR CONFIG ... */ };
+        const firebaseConfig = {
+            apiKey: "AIzaSyDu23dacVvR0o87hzIeYS4Ii2xUE5YmHOo",
+            authDomain: "chat-6baa5.firebaseapp.com",
+            projectId: "chat-6baa5",
+            storageBucket: "chat-6baa5.firebasestorage.app",
+            messagingSenderId: "392445469960",
+            appId: "1:392445469960:web:60b539ab8862a11722f8bd",
+            measurementId: "G-48G4Y0BMZT"
+        };
+
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        let userId = localStorage.getItem('userId') || 'User-' + Math.floor(Math.random() * 900 + 100);
-        localStorage.setItem('userId', userId);
-        document.getElementById('user-display').textContent = `Logged in as: ${userId}`;
+        let username = localStorage.getItem('username');
+        if (!username) {
+            username = prompt("Enter your username:") || "User-" + Math.floor(Math.random() * 900);
+            localStorage.setItem('username', username);
+        }
 
-        let currentRecipient = null; // null = public chat
-
+        let currentRecipient = null;
         const chatWindow = document.getElementById('chat-window');
+        const statusDisplay = document.getElementById('status');
+        const resetBtn = document.getElementById('reset-btn');
+        const recentChatsContainer = document.getElementById('recent-chats');
+
+        // Global functions
+        window.setPrivate = (name) => {
+            if(name === username) return;
+            currentRecipient = name;
+            statusDisplay.textContent = `Chatting with: ${name}`;
+            resetBtn.classList.remove('hidden');
+            
+            // Add to header list if not there
+            if (!document.getElementById(`btn-${name}`)) {
+                const btn = document.createElement('button');
+                btn.id = `btn-${name}`;
+                btn.textContent = name;
+                btn.className = "underline hover:text-blue-800";
+                btn.onclick = () => window.setPrivate(name);
+                recentChatsContainer.appendChild(btn);
+            }
+        };
+
+        window.resetChat = () => {
+            currentRecipient = null;
+            statusDisplay.textContent = "Public Chat";
+            resetBtn.classList.add('hidden');
+        };
+
+        // Listen for messages
         const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
-        
         onSnapshot(q, (snapshot) => {
             chatWindow.innerHTML = "";
             snapshot.forEach((docSnap) => {
                 const msg = docSnap.data();
-                // Filter: Show if public, or if involved in private chat
-                if (!msg.recipient || msg.recipient === userId || msg.sender === userId) {
+                const isMe = msg.sender === username;
+                const isPrivateChat = msg.recipient === username || msg.sender === username;
+                
+                if (!msg.recipient || isPrivateChat) {
                     const div = document.createElement('div');
-                    div.className = `chat-bubble ${msg.sender === userId ? 'my-msg' : 'other-msg'}`;
-                    div.innerHTML = `<small class="block text-[9px] opacity-60" onclick="setRecipient('${msg.sender}')">${msg.sender} ${msg.recipient ? '(Private)' : ''}</small>${msg.text}`;
+                    div.className = `chat-bubble ${isMe ? 'my-msg' : 'other-msg'}`;
+                    div.innerHTML = `<small class="block text-[9px] opacity-60" onclick="window.setPrivate('${msg.sender}')">${msg.sender}${msg.recipient ? ' (Private)' : ''}</small>${msg.text}`;
                     chatWindow.appendChild(div);
                 }
             });
             chatWindow.scrollTop = chatWindow.scrollHeight;
         });
 
-        // Global function to set private chat
-        window.setRecipient = (id) => {
-            if(id === userId) return;
-            currentRecipient = id;
-            alert(`Now chatting privately with ${id}`);
-        };
-
+        // Submit message
         document.getElementById('chat-form').onsubmit = async (e) => {
             e.preventDefault();
             const input = document.getElementById('msg-input');
             const text = input.value.trim();
 
-            if (text === "🚩clear🚩") {
-                const querySnapshot = await getDocs(collection(db, "messages"));
-                querySnapshot.forEach(d => deleteDoc(doc(db, "messages", d.id)));
-            } else {
+            if (text === "!! Clear") {
+                const code = prompt("Enter Secret Code:");
+                if (code === "7759265834") {
+                    const docs = await getDocs(collection(db, "messages"));
+                    docs.forEach(d => deleteDoc(doc(db, "messages", d.id)));
+                } else {
+                    alert("Wrong Code!");
+                }
+            } else if (text !== "") {
                 await addDoc(collection(db, "messages"), {
-                    text, sender: userId, recipient: currentRecipient, createdAt: serverTimestamp()
+                    text, sender: username, recipient: currentRecipient, createdAt: serverTimestamp()
                 });
             }
             input.value = "";
