@@ -3,55 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Realtime Chat</title>
+    <title>Chat App</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .chat-bubble { max-width: 80%; padding: 10px 16px; border-radius: 18px; margin: 4px 0; font-size: 15px; }
+        .my-msg { background-color: #007AFF; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .other-msg { background-color: #E9E9EB; color: #000; align-self: flex-start; border-bottom-left-radius: 4px; }
+        #chat-window { scrollbar-width: none; }
+    </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col">
+<body class="bg-gray-50 h-screen flex flex-col">
 
-    <header class="bg-indigo-600 text-white p-4 font-bold text-xl shadow-md">Live Chat</header>
+    <header class="bg-white border-b p-4 text-center font-bold text-lg shadow-sm">Messenger</header>
 
-    <div id="chat-window" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+    <div id="chat-window" class="flex-1 overflow-y-auto p-4 flex flex-col space-y-1"></div>
 
-    <form id="chat-form" class="bg-white p-4 border-t flex gap-2">
-        <input id="msg-input" type="text" class="flex-1 border rounded-full px-4 py-2 focus:outline-none" placeholder="Message..." required>
-        <button type="submit" class="bg-indigo-600 text-white px-6 py-2 rounded-full">Send</button>
+    <form id="chat-form" class="bg-white p-4 border-t flex gap-3 items-center">
+        <input id="msg-input" type="text" class="flex-1 bg-gray-100 rounded-full px-5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Message..." required>
+        <button type="submit" class="text-blue-500 font-bold px-2">Send</button>
     </form>
 
     <script type="module">
-        // Use CDN URLs that are confirmed to work
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-        import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-        // ADD YOUR CONFIG HERE
         const firebaseConfig = {
             apiKey: "AIzaSyDu23dacVvR0o87hzIeYS4Ii2xUE5YmHOo",
             authDomain: "chat-6baa5.firebaseapp.com",
             projectId: "chat-6baa5",
             storageBucket: "chat-6baa5.firebasestorage.app",
             messagingSenderId: "392445469960",
-            appId: "1:392445469960:web:60b539ab8862a11722f8bd"
+            appId: "1:392445469960:web:60b539ab8862a11722f8bd",
+            measurementId: "G-48G4Y0BMZT"
         };
 
         const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const chatRef = ref(db, 'messages');
+        const db = getFirestore(app);
+
+        // Persistent User ID
+        let userId = localStorage.getItem('userId') || 'User-' + Math.floor(Math.random() * 900 + 100);
+        localStorage.setItem('userId', userId);
 
         const chatWindow = document.getElementById('chat-window');
+        const chatForm = document.getElementById('chat-form');
+        const msgInput = document.getElementById('msg-input');
 
-        onChildAdded(chatRef, (snapshot) => {
-            const msg = snapshot.val();
-            const div = document.createElement('div');
-            div.className = "bg-white p-3 rounded-lg shadow w-fit max-w-[80%]";
-            div.textContent = msg.text;
-            chatWindow.appendChild(div);
+        // Listen to 'messages' collection
+        const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
+        
+        onSnapshot(q, (snapshot) => {
+            chatWindow.innerHTML = "";
+            snapshot.forEach((doc) => {
+                const msg = doc.data();
+                const isMe = msg.sender === userId;
+                const div = document.createElement('div');
+                div.className = `chat-bubble ${isMe ? 'my-msg' : 'other-msg'}`;
+                div.innerHTML = `<small class="block text-[9px] ${isMe ? 'text-blue-100' : 'text-gray-500'}">${msg.sender}</small>${msg.text}`;
+                chatWindow.appendChild(div);
+            });
             chatWindow.scrollTop = chatWindow.scrollHeight;
         });
 
-        document.getElementById('chat-form').onsubmit = (e) => {
+        chatForm.onsubmit = async (e) => {
             e.preventDefault();
-            const input = document.getElementById('msg-input');
-            push(chatRef, { text: input.value });
-            input.value = "";
+            if (!msgInput.value.trim()) return;
+            await addDoc(collection(db, "messages"), {
+                text: msgInput.value,
+                sender: userId,
+                createdAt: serverTimestamp()
+            });
+            msgInput.value = "";
         };
     </script>
 </body>
