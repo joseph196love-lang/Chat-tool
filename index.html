@@ -19,16 +19,17 @@
         <div class="flex flex-col items-center gap-1 mt-1">
             <span id="status" class="text-[10px] text-gray-400 font-normal">Public Chat</span>
             <div id="recent-chats" class="flex gap-2 text-[10px] text-blue-500"></div>
-            <button id="reset-btn" onclick="resetChat()" class="hidden text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Leave Private</button>
+            <button id="reset-btn" onclick="window.resetChat()" class="hidden text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Leave Private</button>
         </div>
     </header>
 
     <div id="chat-window" class="flex-1 overflow-y-auto p-4 flex flex-col space-y-1"></div>
 
-    <form id="chat-form" class="bg-white p-4 border-t flex gap-3 items-center">
-        <input id="msg-input" type="text" class="flex-1 bg-gray-100 rounded-full px-5 py-3 focus:outline-none" placeholder="Message..." required>
-        <button type="submit" class="text-blue-500 font-bold px-4">Send</button>
-    </form>
+    <!-- CHANGED FORM TO DIV TO PREVENT REFRESH -->
+    <div class="bg-white p-4 border-t flex gap-3 items-center">
+        <input id="msg-input" type="text" class="flex-1 bg-gray-100 rounded-full px-5 py-3 focus:outline-none" placeholder="Message...">
+        <button id="send-btn" class="text-blue-500 font-bold px-4">Send</button>
+    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
@@ -47,35 +48,13 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        let username = localStorage.getItem('username');
-        if (!username) {
-            username = prompt("Enter your username:") || "User-" + Math.floor(Math.random() * 900);
-            localStorage.setItem('username', username);
-        }
+        let username = localStorage.getItem('username') || prompt("Enter your username:") || "User-" + Math.floor(Math.random() * 900);
+        localStorage.setItem('username', username);
 
         let currentRecipient = null;
         const chatWindow = document.getElementById('chat-window');
         const statusDisplay = document.getElementById('status');
         const resetBtn = document.getElementById('reset-btn');
-        const recentChatsContainer = document.getElementById('recent-chats');
-
-        // Global functions
-        window.setPrivate = (name) => {
-            if(name === username) return;
-            currentRecipient = name;
-            statusDisplay.textContent = `Chatting with: ${name}`;
-            resetBtn.classList.remove('hidden');
-            
-            // Add to header list if not there
-            if (!document.getElementById(`btn-${name}`)) {
-                const btn = document.createElement('button');
-                btn.id = `btn-${name}`;
-                btn.textContent = name;
-                btn.className = "underline hover:text-blue-800";
-                btn.onclick = () => window.setPrivate(name);
-                recentChatsContainer.appendChild(btn);
-            }
-        };
 
         window.resetChat = () => {
             currentRecipient = null;
@@ -83,46 +62,48 @@
             resetBtn.classList.add('hidden');
         };
 
-        // Listen for messages
-        const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
-        onSnapshot(q, (snapshot) => {
-            chatWindow.innerHTML = "";
-            snapshot.forEach((docSnap) => {
-                const msg = docSnap.data();
-                const isMe = msg.sender === username;
-                const isPrivateChat = msg.recipient === username || msg.sender === username;
-                
-                if (!msg.recipient || isPrivateChat) {
-                    const div = document.createElement('div');
-                    div.className = `chat-bubble ${isMe ? 'my-msg' : 'other-msg'}`;
-                    div.innerHTML = `<small class="block text-[9px] opacity-60" onclick="window.setPrivate('${msg.sender}')">${msg.sender}${msg.recipient ? ' (Private)' : ''}</small>${msg.text}`;
-                    chatWindow.appendChild(div);
-                }
-            });
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        });
+        window.setPrivate = (name) => {
+            if(name === username) return;
+            currentRecipient = name;
+            statusDisplay.textContent = `Chatting with: ${name}`;
+            resetBtn.classList.remove('hidden');
+        };
 
-        // Submit message
-        document.getElementById('chat-form').onsubmit = async (e) => {
-            e.preventDefault();
+        // UI Listener
+        document.getElementById('send-btn').onclick = async () => {
             const input = document.getElementById('msg-input');
             const text = input.value.trim();
+            if (!text) return;
 
             if (text === "!! Clear") {
                 const code = prompt("Enter Secret Code:");
                 if (code === "7759265834") {
                     const docs = await getDocs(collection(db, "messages"));
                     docs.forEach(d => deleteDoc(doc(db, "messages", d.id)));
-                } else {
-                    alert("Wrong Code!");
                 }
-            } else if (text !== "") {
+            } else {
                 await addDoc(collection(db, "messages"), {
                     text, sender: username, recipient: currentRecipient, createdAt: serverTimestamp()
                 });
             }
             input.value = "";
         };
+
+        // Real-time listener
+        const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
+        onSnapshot(q, (snapshot) => {
+            chatWindow.innerHTML = "";
+            snapshot.forEach((docSnap) => {
+                const msg = docSnap.data();
+                if (!msg.recipient || msg.recipient === username || msg.sender === username) {
+                    const div = document.createElement('div');
+                    div.className = `chat-bubble ${msg.sender === username ? 'my-msg' : 'other-msg'}`;
+                    div.innerHTML = `<small class="block text-[9px] opacity-60" onclick="window.setPrivate('${msg.sender}')">${msg.sender}</small>${msg.text}`;
+                    chatWindow.appendChild(div);
+                }
+            });
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        });
     </script>
 </body>
 </html>
