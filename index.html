@@ -2,12 +2,23 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Messenger</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #000; color: white; }
-        .chat-window { position: fixed; bottom: 20px; right: 20px; width: 300px; height: 400px; background: #1c1c1e; border: 1px solid #333; border-radius: 15px; display: flex; flex-direction: column; z-index: 50; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
-        .bubble { padding: 10px 15px; border-radius: 18px; margin: 4px 10px; font-size: 15px; max-width: 75%; position: relative; }
+        body { background-color: #000; color: white; margin: 0; font-family: sans-serif; }
+        
+        /* Desktop vs Mobile Chat Window */
+        .chat-window { 
+            position: fixed; bottom: 0; right: 0; width: 100%; height: 90%; 
+            background: #1c1c1e; border-top-left-radius: 15px; border-top-right-radius: 15px;
+            display: flex; flex-direction: column; z-index: 100;
+        }
+        @media (min-width: 768px) {
+            .chat-window { width: 320px; height: 450px; right: 20px; bottom: 20px; border-radius: 15px; }
+        }
+
+        .bubble { padding: 10px 15px; border-radius: 18px; margin: 6px 10px; font-size: 15px; max-width: 75%; position: relative; }
         .my-msg { background: #007AFF; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
         .other-msg { background: #333335; color: white; align-self: flex-start; border-bottom-left-radius: 2px; }
     </style>
@@ -21,7 +32,7 @@
     </header>
 
     <div id="menu" class="hidden absolute left-0 top-16 bg-[#1c1c1e] p-4 w-48 shadow-lg z-40 border border-[#333]">
-        <p class="font-bold border-b border-[#333] mb-2">Online</p>
+        <p class="font-bold border-b border-[#333] mb-2">Online Users</p>
         <div id="user-list"></div>
     </div>
 
@@ -49,11 +60,10 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         
-        // Random Username Assignment
-        const adjectives = ["Happy", "Swift", "Cool", "Bold", "Wild"];
-        const nouns = ["Tiger", "Eagle", "Shark", "Wolf", "Bear"];
         let username = localStorage.getItem('username');
         if (!username) {
+            const adjectives = ["Happy", "Swift", "Cool", "Bold", "Wild"];
+            const nouns = ["Tiger", "Eagle", "Shark", "Wolf", "Bear"];
             username = adjectives[Math.floor(Math.random()*adjectives.length)] + nouns[Math.floor(Math.random()*nouns.length)] + Math.floor(Math.random()*99);
             localStorage.setItem('username', username);
         }
@@ -71,13 +81,14 @@
                     <button onclick="this.parentElement.parentElement.remove()" class="text-gray-400">✕</button>
                 </div>
                 <div class="flex-1 overflow-y-auto p-2" id="msgs-${recipient}"></div>
-                <div class="p-2 border-t border-[#333] flex"><input id="in-${recipient}" class="flex-1 bg-black text-white px-2" placeholder="Msg..."><button onclick="sendPrivate('${recipient}')" class="text-blue-500 px-2">Send</button></div>
+                <div class="p-2 border-t border-[#333] flex"><input id="in-${recipient}" class="flex-1 bg-black text-white px-2 rounded" placeholder="Msg..."><button onclick="sendPrivate('${recipient}')" class="text-blue-500 px-2">Send</button></div>
             `;
             document.body.appendChild(div);
         };
 
         window.sendPrivate = async (recipient) => {
             const input = document.getElementById(`in-${recipient}`);
+            if(!input.value.trim()) return;
             await addDoc(collection(db, "messages"), { text: input.value, sender: username, recipient: recipient, createdAt: serverTimestamp() });
             input.value = "";
         };
