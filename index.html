@@ -10,18 +10,16 @@
         .chat-window { position: fixed; bottom: 0; right: 0; width: 100%; height: 90%; background: #1c1c1e; border-top-left-radius: 15px; border-top-right-radius: 15px; display: flex; flex-direction: column; z-index: 100; }
         @media (min-width: 768px) { .chat-window { width: 320px; height: 450px; right: 20px; bottom: 20px; border-radius: 15px; } }
         .bubble { padding: 10px 15px; border-radius: 18px; margin: 6px 10px; font-size: 15px; max-width: 75%; }
-        .my-msg { background: #007AFF; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
-        .other-msg { background: #333335; color: white; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .my-msg { background: #007AFF; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .other-msg { background: #333335; align-self: flex-start; border-bottom-left-radius: 2px; }
     </style>
 </head>
 <body class="h-screen flex flex-col">
 
     <header class="p-4 flex justify-between items-center border-b border-[#333]">
-        <button onclick="toggleMenu()" class="text-xl">☰</button>
+        <button id="menu-btn" class="text-xl">☰</button>
         <span class="font-bold">Messenger</span>
-        <button onclick="openPrivateList()" class="relative">
-            💬 <span id="unread-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-[9px] px-1 rounded-full">0</span>
-        </button>
+        <button id="chat-list-btn" class="relative">💬 <span id="unread-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-[9px] px-1 rounded-full">0</span></button>
     </header>
 
     <div id="menu" class="hidden absolute left-0 top-16 bg-[#1c1c1e] p-4 w-48 shadow-lg z-40 border border-[#333]">
@@ -40,38 +38,33 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, where, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-        const firebaseConfig = { /* YOUR CONFIG */ };
+        const firebaseConfig = { /* YOUR CONFIG HERE */ };
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         
-        let username = localStorage.getItem('username') || "User-" + Math.floor(Math.random()*999);
+        const username = localStorage.getItem('username') || "User-" + Math.floor(Math.random()*999);
         localStorage.setItem('username', username);
 
-        // 1. ONLINE STATUS
-        setDoc(doc(db, "users", username), { lastSeen: serverTimestamp() });
-        setInterval(() => setDoc(doc(db, "users", username), { lastSeen: serverTimestamp() }), 30000);
-
-        onSnapshot(collection(db, "users"), (snap) => {
-            const list = document.getElementById('user-list');
-            list.innerHTML = "";
-            snap.forEach(d => {
-                const u = d.id;
-                if(u !== username) list.innerHTML += `<div class="cursor-pointer py-1" onclick="openPrivateChat('${u}')">${u}</div>`;
-            });
-        });
-
-        // 2. SEND PRIVATE MESSAGE
-        window.sendPrivate = async (recipient) => {
-            const input = document.getElementById(`in-${recipient}`);
-            if(!input.value.trim()) return;
-            await addDoc(collection(db, "messages"), { 
-                text: input.value, sender: username, recipient: recipient, read: false, createdAt: serverTimestamp() 
-            });
+        // --- BUTTONS ---
+        document.getElementById('menu-btn').onclick = () => document.getElementById('menu').classList.toggle('hidden');
+        
+        document.getElementById('send-btn').onclick = async () => {
+            const input = document.getElementById('msg-input');
+            if (!input.value.trim()) return;
+            await addDoc(collection(db, "messages"), { text: input.value, sender: username, createdAt: serverTimestamp() });
             input.value = "";
         };
 
-        // 3. PRIVATE CHAT UI
-        window.openPrivateChat = (recipient) => {
+        // --- DYNAMIC EVENT DELEGATION ---
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('user-link')) {
+                const recipient = e.target.dataset.user;
+                openPrivateChat(recipient);
+            }
+        });
+
+        // --- PRIVATE CHAT ---
+        function openPrivateChat(recipient) {
             if(document.getElementById(`win-${recipient}`)) return;
             const div = document.createElement('div');
             div.className = "chat-window";
@@ -81,23 +74,24 @@
                     <span class="font-bold">${recipient}</span> <button onclick="this.parentElement.parentElement.remove()" class="text-gray-400">✕</button>
                 </div>
                 <div class="flex-1 overflow-y-auto p-2" id="msgs-${recipient}"></div>
-                <div class="p-2 border-t border-[#333] flex"><input id="in-${recipient}" class="flex-1 bg-black text-white px-2 rounded" placeholder="Msg..."><button onclick="sendPrivate('${recipient}')" class="text-blue-500 px-2">Send</button></div>
+                <div class="p-2 border-t border-[#333] flex"><input id="in-${recipient}" class="flex-1 bg-black text-white px-2 rounded" placeholder="Msg..."><button id="send-priv-${recipient}" class="text-blue-500 px-2">Send</button></div>
             `;
             document.body.appendChild(div);
-            // Load messages for this private chat...
-        };
+            
+            document.getElementById(`send-priv-${recipient}`).onclick = async () => {
+                const input = document.getElementById(`in-${recipient}`);
+                await addDoc(collection(db, "messages"), { text: input.value, sender: username, recipient: recipient, read: false, createdAt: serverTimestamp() });
+                input.value = "";
+            };
+        }
 
-        window.toggleMenu = () => document.getElementById('menu').classList.toggle('hidden');
-        
-        // Unread Badge Logic
-        onSnapshot(query(collection(db, "messages"), where("recipient", "==", username), where("read", "==", false)), (snap) => {
-            const badge = document.getElementById('unread-badge');
-            if(snap.size > 0) {
-                badge.textContent = snap.size;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
+        // --- ONLINE STATUS ---
+        onSnapshot(collection(db, "users"), (snap) => {
+            const list = document.getElementById('user-list');
+            list.innerHTML = "";
+            snap.forEach(d => {
+                if(d.id !== username) list.innerHTML += `<div class="cursor-pointer py-1 user-link" data-user="${d.id}">${d.id}</div>`;
+            });
         });
     </script>
 </body>
