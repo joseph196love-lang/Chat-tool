@@ -19,11 +19,11 @@
     <header class="p-4 flex justify-between items-center border-b border-[#333]">
         <button id="menu-btn" class="text-xl">☰</button>
         <span class="font-bold">Messenger</span>
-        <button id="chat-list-btn" class="relative">💬 <span id="unread-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-[9px] px-1 rounded-full">0</span></button>
+        <div id="private-tabs">💬</div>
     </header>
 
     <div id="menu" class="hidden absolute left-0 top-16 bg-[#1c1c1e] p-4 w-48 shadow-lg z-40 border border-[#333]">
-        <p class="font-bold border-b border-[#333] mb-2">Online</p>
+        <p class="font-bold border-b border-[#333] mb-2">Online Users</p>
         <div id="user-list"></div>
     </div>
 
@@ -34,63 +34,51 @@
         <button id="send-btn" class="bg-blue-600 text-white px-6 py-2 rounded-full">Send</button>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, where, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-        const firebaseConfig = { /* YOUR CONFIG HERE */ };
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+    <script>
+        // 1. Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyDu23dacVvR0o87hzIeYS4Ii2xUE5YmHOo",
+            authDomain: "chat-6baa5.firebaseapp.com",
+            projectId: "chat-6baa5",
+            storageBucket: "chat-6baa5.firebasestorage.app",
+            messagingSenderId: "392445469960",
+            appId: "1:392445469960:web:60b539ab8862a11722f8bd"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
         
-        const username = localStorage.getItem('username') || "User-" + Math.floor(Math.random()*999);
+        let username = localStorage.getItem('username') || "User-" + Math.floor(Math.random()*999);
         localStorage.setItem('username', username);
 
-        // --- BUTTONS ---
+        // 2. Buttons work now because they are standard functions
         document.getElementById('menu-btn').onclick = () => document.getElementById('menu').classList.toggle('hidden');
         
-        document.getElementById('send-btn').onclick = async () => {
+        document.getElementById('send-btn').onclick = () => {
             const input = document.getElementById('msg-input');
             if (!input.value.trim()) return;
-            await addDoc(collection(db, "messages"), { text: input.value, sender: username, createdAt: serverTimestamp() });
+            db.collection("messages").add({
+                text: input.value,
+                sender: username,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
             input.value = "";
         };
 
-        // --- DYNAMIC EVENT DELEGATION ---
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('user-link')) {
-                const recipient = e.target.dataset.user;
-                openPrivateChat(recipient);
-            }
-        });
-
-        // --- PRIVATE CHAT ---
-        function openPrivateChat(recipient) {
-            if(document.getElementById(`win-${recipient}`)) return;
-            const div = document.createElement('div');
-            div.className = "chat-window";
-            div.id = `win-${recipient}`;
-            div.innerHTML = `
-                <div class="p-3 bg-[#1c1c1e] border-b border-[#333] flex justify-between rounded-t-lg">
-                    <span class="font-bold">${recipient}</span> <button onclick="this.parentElement.parentElement.remove()" class="text-gray-400">✕</button>
-                </div>
-                <div class="flex-1 overflow-y-auto p-2" id="msgs-${recipient}"></div>
-                <div class="p-2 border-t border-[#333] flex"><input id="in-${recipient}" class="flex-1 bg-black text-white px-2 rounded" placeholder="Msg..."><button id="send-priv-${recipient}" class="text-blue-500 px-2">Send</button></div>
-            `;
-            document.body.appendChild(div);
-            
-            document.getElementById(`send-priv-${recipient}`).onclick = async () => {
-                const input = document.getElementById(`in-${recipient}`);
-                await addDoc(collection(db, "messages"), { text: input.value, sender: username, recipient: recipient, read: false, createdAt: serverTimestamp() });
-                input.value = "";
-            };
-        }
-
-        // --- ONLINE STATUS ---
-        onSnapshot(collection(db, "users"), (snap) => {
-            const list = document.getElementById('user-list');
-            list.innerHTML = "";
-            snap.forEach(d => {
-                if(d.id !== username) list.innerHTML += `<div class="cursor-pointer py-1 user-link" data-user="${d.id}">${d.id}</div>`;
+        // 3. Real-time listener
+        db.collection("messages").orderBy("createdAt", "asc").onSnapshot(snapshot => {
+            const mainChat = document.getElementById('main-chat');
+            mainChat.innerHTML = "";
+            snapshot.forEach(doc => {
+                const msg = doc.data();
+                if(!msg.recipient) {
+                    const div = document.createElement('div');
+                    div.className = `bubble ${msg.sender === username ? 'my-msg' : 'other-msg'}`;
+                    div.innerHTML = `<small style="font-size:9px; opacity:0.6">${msg.sender}</small><br>${msg.text}`;
+                    mainChat.appendChild(div);
+                }
             });
         });
     </script>
