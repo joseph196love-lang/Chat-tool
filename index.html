@@ -7,17 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #000; color: white; margin: 0; font-family: sans-serif; }
-        
-        /* Desktop vs Mobile Chat Window */
-        .chat-window { 
-            position: fixed; bottom: 0; right: 0; width: 100%; height: 90%; 
-            background: #1c1c1e; border-top-left-radius: 15px; border-top-right-radius: 15px;
-            display: flex; flex-direction: column; z-index: 100;
-        }
-        @media (min-width: 768px) {
-            .chat-window { width: 320px; height: 450px; right: 20px; bottom: 20px; border-radius: 15px; }
-        }
-
+        .chat-window { position: fixed; bottom: 0; right: 0; width: 100%; height: 90%; background: #1c1c1e; border-top-left-radius: 15px; border-top-right-radius: 15px; display: flex; flex-direction: column; z-index: 100; }
+        @media (min-width: 768px) { .chat-window { width: 320px; height: 450px; right: 20px; bottom: 20px; border-radius: 15px; } }
         .bubble { padding: 10px 15px; border-radius: 18px; margin: 6px 10px; font-size: 15px; max-width: 75%; position: relative; }
         .my-msg { background: #007AFF; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
         .other-msg { background: #333335; color: white; align-self: flex-start; border-bottom-left-radius: 2px; }
@@ -32,7 +23,7 @@
     </header>
 
     <div id="menu" class="hidden absolute left-0 top-16 bg-[#1c1c1e] p-4 w-48 shadow-lg z-40 border border-[#333]">
-        <p class="font-bold border-b border-[#333] mb-2">Online Users</p>
+        <p class="font-bold border-b border-[#333] mb-2">Online</p>
         <div id="user-list"></div>
     </div>
 
@@ -45,38 +36,59 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, getDocs, deleteDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyDu23dacVvR0o87hzIeYS4Ii2xUE5YmHOo",
-            authDomain: "chat-6baa5.firebaseapp.com",
-            projectId: "chat-6baa5",
-            storageBucket: "chat-6baa5.firebasestorage.app",
-            messagingSenderId: "392445469960",
-            appId: "1:392445469960:web:60b539ab8862a11722f8bd",
-            measurementId: "G-48G4Y0BMZT"
-        };
-
+        const firebaseConfig = { /* USE YOUR EXISTING CONFIG HERE */ };
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         
-        let username = localStorage.getItem('username');
-        if (!username) {
-            const adjectives = ["Happy", "Swift", "Cool", "Bold", "Wild"];
-            const nouns = ["Tiger", "Eagle", "Shark", "Wolf", "Bear"];
-            username = adjectives[Math.floor(Math.random()*adjectives.length)] + nouns[Math.floor(Math.random()*nouns.length)] + Math.floor(Math.random()*99);
-            localStorage.setItem('username', username);
-        }
+        let username = localStorage.getItem('username') || "User-" + Math.floor(Math.random()*999);
+        localStorage.setItem('username', username);
 
         window.toggleMenu = () => document.getElementById('menu').classList.toggle('hidden');
 
+        // Main Send Function
+        document.getElementById('send-btn').onclick = async () => {
+            const input = document.getElementById('msg-input');
+            if (input.value === "!! Clear") {
+                if (prompt("Enter Code:") === "7759265834") {
+                    await addDoc(collection(db, "config"), { clearTimestamp: serverTimestamp() });
+                }
+            } else if (input.value.trim() !== "") {
+                await addDoc(collection(db, "messages"), { text: input.value, sender: username, createdAt: serverTimestamp() });
+            }
+            input.value = "";
+        };
+
+        // Snapshot: Get Clear Timestamp, then fetch messages
+        onSnapshot(query(collection(db, "config"), orderBy("clearTimestamp", "desc"), limit(1)), (configSnap) => {
+            let clearTime = 0;
+            if (!configSnap.empty) clearTime = configSnap.docs[0].data().clearTimestamp?.toMillis() || 0;
+
+            onSnapshot(query(collection(db, "messages"), orderBy("createdAt", "asc")), (snapshot) => {
+                const mainChat = document.getElementById('main-chat');
+                mainChat.innerHTML = "";
+                snapshot.forEach((d) => {
+                    const msg = d.data();
+                    const msgTime = msg.createdAt?.toMillis() || 0;
+                    if(!msg.recipient && msgTime > clearTime) {
+                        const div = document.createElement('div');
+                        div.className = `bubble ${msg.sender === username ? 'my-msg' : 'other-msg'}`;
+                        div.innerHTML = `<small class="block text-[9px] opacity-60 cursor-pointer" onclick="openPrivateChat('${msg.sender}')">${msg.sender}</small>${msg.text}`;
+                        mainChat.appendChild(div);
+                    }
+                });
+            });
+        });
+
+        // Private Chat Placeholder
         window.openPrivateChat = (recipient) => {
             if(document.getElementById(`win-${recipient}`)) return;
             const div = document.createElement('div');
             div.className = "chat-window";
             div.id = `win-${recipient}`;
             div.innerHTML = `
-                <div class="p-3 bg-[#1c1c1e] text-white border-b border-[#333] flex justify-between rounded-t-lg">
+                <div class="p-3 bg-[#1c1c1e] border-b border-[#333] flex justify-between rounded-t-lg">
                     <span class="font-bold">${recipient}</span> 
                     <button onclick="this.parentElement.parentElement.remove()" class="text-gray-400">✕</button>
                 </div>
@@ -85,40 +97,6 @@
             `;
             document.body.appendChild(div);
         };
-
-        window.sendPrivate = async (recipient) => {
-            const input = document.getElementById(`in-${recipient}`);
-            if(!input.value.trim()) return;
-            await addDoc(collection(db, "messages"), { text: input.value, sender: username, recipient: recipient, createdAt: serverTimestamp() });
-            input.value = "";
-        };
-
-        document.getElementById('send-btn').onclick = async () => {
-            const input = document.getElementById('msg-input');
-            if (input.value === "!! Clear") {
-                if (prompt("Enter Code:") === "7759265834") {
-                    const docs = await getDocs(collection(db, "messages"));
-                    docs.forEach(d => deleteDoc(doc(db, "messages", d.id)));
-                }
-            } else if (input.value.trim() !== "") {
-                await addDoc(collection(db, "messages"), { text: input.value, sender: username, createdAt: serverTimestamp() });
-            }
-            input.value = "";
-        };
-
-        onSnapshot(query(collection(db, "messages"), orderBy("createdAt", "asc")), (snapshot) => {
-            const mainChat = document.getElementById('main-chat');
-            mainChat.innerHTML = "";
-            snapshot.forEach((d) => {
-                const msg = d.data();
-                if(!msg.recipient) {
-                    const div = document.createElement('div');
-                    div.className = `bubble ${msg.sender === username ? 'my-msg' : 'other-msg'}`;
-                    div.innerHTML = `<small class="block text-[9px] opacity-60 cursor-pointer" onclick="openPrivateChat('${msg.sender}')">${msg.sender}</small>${msg.text}`;
-                    mainChat.appendChild(div);
-                }
-            });
-        });
     </script>
 </body>
 </html>
